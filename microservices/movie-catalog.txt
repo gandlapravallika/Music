@@ -1,0 +1,395 @@
+MovieCatalogServiceFeignApplication:
+-----------------------------------
+package com.htc;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.cloud.client.circuitbreaker.EnableCircuitBreaker;
+import org.springframework.cloud.netflix.eureka.EnableEurekaClient;
+import org.springframework.cloud.netflix.hystrix.EnableHystrix;
+import org.springframework.cloud.netflix.hystrix.dashboard.EnableHystrixDashboard;
+import org.springframework.cloud.openfeign.EnableFeignClients;
+
+@SpringBootApplication
+@EnableFeignClients
+@EnableEurekaClient
+@EnableCircuitBreaker
+@EnableHystrix
+@EnableHystrixDashboard
+public class MovieCatalogServiceFeignApplication {
+
+	public static void main(String[] args) {
+		SpringApplication.run(MovieCatalogServiceFeignApplication.class, args);
+	}
+
+}
+
+MovieInfo:
+---------
+package com.htc.beans;
+
+public class MovieInfo 
+{
+	private String movieId;
+	private String movieName;
+	private String movieDirector;
+	
+	public MovieInfo()
+	{
+		
+	}
+
+	public MovieInfo(String movieId, String movieName, String movieDirector) {
+		super();
+		this.movieId = movieId;
+		this.movieName = movieName;
+		this.movieDirector = movieDirector;
+	}
+
+	public String getMovieId() {
+		return movieId;
+	}
+
+	public void setMovieId(String movieId) {
+		this.movieId = movieId;
+	}
+
+	public String getMovieName() {
+		return movieName;
+	}
+
+	public void setMovieName(String movieName) {
+		this.movieName = movieName;
+	}
+
+	public String getMovieDirector() {
+		return movieDirector;
+	}
+
+	public void setMovieDirector(String movieDirector) {
+		this.movieDirector = movieDirector;
+	}
+
+	@Override
+	public String toString() {
+		return "MovieInfo [movieId=" + movieId + ", movieName=" + movieName + ", movieDirector=" + movieDirector + "]";
+	}
+	
+}
+
+MovieRating:
+-----------
+package com.htc.beans;
+
+public class MovieRating 
+{
+	private String movieId;
+	private String movieRating;
+	
+	public MovieRating()
+	{
+		
+	}
+
+	public MovieRating(String movieId, String movieRating) {
+		super();
+		this.movieId = movieId;
+		this.movieRating = movieRating;
+	}
+
+	public String getMovieId() {
+		return movieId;
+	}
+
+	public void setMovieId(String movieId) {
+		this.movieId = movieId;
+	}
+
+	public String getMovieRating() {
+		return movieRating;
+	}
+
+	public void setMovieRating(String movieRating) {
+		this.movieRating = movieRating;
+	}
+
+	@Override
+	public String toString() {
+		return "MovieRating [movieId=" + movieId + ", movieRating=" + movieRating + "]";
+	}
+	
+}
+
+MovieCatalogController:
+----------------------
+package com.htc.controller;
+
+import java.util.List;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cloud.openfeign.EnableFeignClients;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RestController;
+
+import com.htc.beans.MovieInfo;
+import com.htc.beans.MovieRating;
+import com.htc.service.MovieInfoService;
+import com.htc.service.MovieRatingService;
+import com.netflix.hystrix.contrib.javanica.annotation.HystrixCommand;
+import com.netflix.hystrix.contrib.javanica.annotation.HystrixProperty;
+import com.htc.service.MovieInfoService;
+
+@RestController
+public class MovieCatalogController
+{
+	
+	@Autowired
+	private MovieInfoService movieInfoService;
+	
+	@Autowired
+	private MovieRatingService movieRatingService;
+
+	@GetMapping("/movie-info/movie-list")
+	public ResponseEntity<List<MovieInfo>> getAllMovieInfos() {
+		// TODO Auto-generated method stub
+		return movieInfoService.getAllUser();
+	}
+	
+	@GetMapping("/movie-info-id/{id}")
+	@HystrixCommand(commandKey = "userTasks", fallbackMethod =
+	  "userTasksFallback",commandProperties = {
+	  
+	 @HystrixProperty(name = "circuitBreaker.errorThresholdPercentage",value =
+			  "50")
+	  
+	  })
+	public ResponseEntity<MovieInfo> getMovieById(@PathVariable("id") String movieId)
+	{
+		return movieInfoService.getMovieById(movieId);
+	}
+	
+	@PostMapping("/movie-info/add-movie")
+	public ResponseEntity<MovieInfo> addMovie(@RequestBody MovieInfo movieInfo)
+	{
+		return movieInfoService.addMovieInfoData(movieInfo);
+	}
+	
+	@GetMapping("/movie-rating-list")
+	public ResponseEntity<List<MovieRating>> getAllMovieRatings()
+	{
+		return movieRatingService.getAllMovieRatings();
+	}
+	
+	@GetMapping("/movie-rating/{id}")
+	public ResponseEntity<MovieRating> getMovieRatingById(@PathVariable("id") String movieId)
+	{
+		return movieRatingService.getMovieRatingById(movieId);
+	}
+	
+	public ResponseEntity<MovieInfo> userTasksFallback(@PathVariable("id") String movieId) {
+		return new ResponseEntity<MovieInfo>(new MovieInfo(), HttpStatus.OK);
+	}
+	
+	@PostMapping("/movie-rating/add-movie")
+	public ResponseEntity<MovieRating> addMovieRating(@RequestBody MovieRating movieRating)
+	{
+		return movieRatingService.addMovieRating(movieRating);
+	}
+	
+}
+
+
+MovieInfoService:
+----------------
+package com.htc.service;
+
+import java.util.List;
+import org.springframework.cloud.netflix.ribbon.RibbonClient;
+import org.springframework.cloud.openfeign.FeignClient;
+import org.springframework.http.ResponseEntity;
+import org.springframework.stereotype.Service;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+
+import com.htc.beans.MovieInfo;
+
+@Service
+@FeignClient(name ="movie-info-service")
+@RibbonClient(name="movie-info-service")
+public interface MovieInfoService 
+{
+	@GetMapping("/movie-info/movie-list")
+	public ResponseEntity<List<MovieInfo>> getAllUser();
+	
+	@GetMapping("/movie-info-id/{id}")
+	public ResponseEntity<MovieInfo> getMovieById(@PathVariable("id") String movieId);
+	
+	@PostMapping("/movie-info/add-movie")
+	public ResponseEntity<MovieInfo> addMovieInfoData(@RequestBody MovieInfo movieInfo);
+	
+}
+
+
+MovieRatingService:
+------------------
+package com.htc.service;
+
+import java.util.List;
+
+import org.springframework.cloud.netflix.ribbon.RibbonClient;
+import org.springframework.cloud.openfeign.FeignClient;
+import org.springframework.http.ResponseEntity;
+import org.springframework.stereotype.Service;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+
+import com.htc.beans.MovieRating;
+
+@Service
+@FeignClient(name = "movie-rating-service")
+@RibbonClient(name = "movie-rating-service")
+public interface MovieRatingService 
+{
+	@GetMapping("/movie-rating-list")
+	public ResponseEntity<List<MovieRating>> getAllMovieRatings();
+	
+	@GetMapping("/movie-rating/{id}")
+	public ResponseEntity<MovieRating> getMovieRatingById(@PathVariable("id") String movieId);
+	
+	@PostMapping("/movie-rating/add-movie")
+	public ResponseEntity<MovieRating> addMovieRating(@RequestBody MovieRating movieRating);
+	
+}
+
+
+application.properties:
+----------------------
+server.port=8084
+spring.application.name=movie-catalog-service-feign
+spring.cloud.config.uri=http://localhost:9000
+
+pom.xml:
+-------
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+	<parent>
+		<groupId>org.springframework.boot</groupId>
+		<artifactId>spring-boot-starter-parent</artifactId>
+		<version>2.3.4.RELEASE</version>
+		<relativePath/> <!-- lookup parent from repository -->
+	</parent>
+	<groupId>com.htc</groupId>
+	<artifactId>movie-catalog</artifactId>
+	<version>0.0.1-SNAPSHOT</version>
+	<name>movie-catalog-service-feign</name>
+	<description>Demo project for Spring Boot Using Restful web services</description>
+
+	<properties>
+		<java.version>1.8</java.version>
+		<spring-cloud.version>Hoxton.SR8</spring-cloud.version>
+	</properties>
+
+	<dependencies>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-jdbc</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-web</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.cloud</groupId>
+			<artifactId>spring-cloud-starter-netflix-ribbon</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.cloud</groupId>
+			<artifactId>spring-cloud-starter-openfeign</artifactId>
+		</dependency>
+
+		<dependency>
+			<groupId>org.postgresql</groupId>
+			<artifactId>postgresql</artifactId>
+			<scope>runtime</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-test</artifactId>
+			<scope>test</scope>
+			<exclusions>
+				<exclusion>
+					<groupId>org.junit.vintage</groupId>
+					<artifactId>junit-vintage-engine</artifactId>
+				</exclusion>
+			</exclusions>
+		</dependency>
+		<dependency>
+			<groupId>com.h2database</groupId>
+			<artifactId>h2</artifactId>
+			<scope>runtime</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-amqp</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-data-jpa</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.cloud</groupId>
+			<artifactId>
+				spring-cloud-starter-netflix-eureka-client
+			</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.amqp</groupId>
+			<artifactId>spring-rabbit-test</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.cloud</groupId>
+			<artifactId>
+				spring-cloud-starter-netflix-hystrix
+			</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.cloud</groupId>
+			<artifactId>
+				spring-cloud-starter-netflix-hystrix-dashboard
+			</artifactId>
+		</dependency>
+	</dependencies>
+
+	<dependencyManagement>
+		<dependencies>
+			<dependency>
+				<groupId>org.springframework.cloud</groupId>
+				<artifactId>spring-cloud-dependencies</artifactId>
+				<version>${spring-cloud.version}</version>
+				<type>pom</type>
+				<scope>import</scope>
+			</dependency>
+		</dependencies>
+	</dependencyManagement>
+
+	<build>
+		<plugins>
+			<plugin>
+				<groupId>org.springframework.boot</groupId>
+				<artifactId>spring-boot-maven-plugin</artifactId>
+			</plugin>
+		</plugins>
+	</build>
+
+</project>
